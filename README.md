@@ -1,59 +1,290 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# PHP_Laravel12_Send_Notification_Using_Pusher
 
 <p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+  <img src="https://img.shields.io/badge/Laravel-12.x-FF2D20.svg?style=for-the-badge&logo=laravel">
+  <img src="https://img.shields.io/badge/Intervention-Image%20v3-blue.svg?style=for-the-badge">
+  <img src="https://img.shields.io/badge/Watermark-Enabled-success.svg?style=for-the-badge">
 </p>
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+##  Overview  
+This tutorial shows how to **upload an image in Laravel 12**, apply a **watermark logo**, and save the watermarked image using **Intervention Image v3**.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+✔ Works with JPG, PNG, JPEG  
+✔ Adds bottom-right watermark  
+✔ Uses transparent PNG logo  
+✔ Saves final watermarked image to `/public/images`
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+##  Features
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+###  Watermark Features  
+- Add watermark to any uploaded image  
+- Auto-resize watermark  
+- Blend watermark with brightness  
+- Position watermark in **bottom-right** with padding  
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+###  Technical Features  
+- Laravel 12 compatible  
+- Uses Intervention Image v3  
+- Auto-registers service provider  
+- No manual configuration needed  
 
-## Laravel Sponsors
+###  Storage Features  
+- Saves images to:  
+  ```
+  public/images/
+  ```
+- Requires logo watermark at:  
+  ```
+  public/logo.png
+  ```
+- Creates unique filename using timestamp  
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+---
 
-### Premium Partners
+##  Folder Structure  
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+```
+app/
+├── Http/
+│   └── Controllers/
+│       └── ImageController.php
 
-## Contributing
+resources/
+└── views/
+    └── imageUpload.blade.php
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+public/
+├── images/
+└── logo.png
 
-## Code of Conduct
+routes/
+└── web.php
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+---
 
-## Security Vulnerabilities
+#  Step 1 — Install Laravel 12
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+composer create-project laravel/laravel my-watermark-app
+cd my-watermark-app
+```
 
-## License
+---
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+#  Step 2 — .env Setup
+
+```
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=laravel
+DB_USERNAME=root
+DB_PASSWORD=
+```
+
+ No DB is required for watermarking —  
+but `.env` must be correct to avoid Laravel errors.
+
+---
+
+#  Step 3 — Install Intervention Image v3
+
+```bash
+composer require intervention/image-laravel
+```
+
+✔ Laravel 12 supports v3 automatically  
+✔ No provider registration needed  
+
+---
+
+#  Step 4 — Create Required Folders
+
+Inside **public/** create:
+
+```
+public/images/     ← to store final watermarked images  
+public/logo.png    ← your watermark logo
+```
+
+ **Logo must be transparent PNG**  
+ Must be named **logo.png**
+
+---
+
+#  Step 5 — Add Routes  
+
+ `routes/web.php`
+
+```php
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\ImageController;
+
+// Show upload page
+Route::get('image-upload', [ImageController::class, 'index']);
+
+// Process image + watermark
+Route::post('image-upload', [ImageController::class, 'store'])->name('image.store');
+```
+
+---
+
+#  Step 6 — Create Controller  
+
+Run:
+
+```bash
+php artisan make:controller ImageController
+```
+
+ **app/Http/Controllers/ImageController.php**
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Intervention\Image\Laravel\Facades\Image;
+
+class ImageController extends Controller
+{
+    /** Show the upload form */
+    public function index()
+    {
+        return view('imageUpload');
+    }
+
+    /** Handle upload + watermark process */
+    public function store(Request $request)
+    {
+        $request->validate([
+            'image' => 'required|image'
+        ]);
+
+        $imageName = time().'.'.$request->image->extension();
+
+        // Load main image
+        $img = Image::read($request->image->path());
+
+        // Load watermark logo
+        $watermark = Image::read(public_path('logo.png'));
+
+        // Resize watermark (keep aspect ratio)
+        $watermark->resize(80, null, function ($c) {
+            $c->aspectRatio();
+        });
+
+        // Slight dark overlay for blending
+        $watermark->brightness(-10);
+
+        // Place watermark at bottom-right with padding
+        $img->place($watermark, 'bottom-right', 10, 10);
+
+        // Save final watermarked image
+        $img->save(public_path('images/' . $imageName));
+
+        return back()
+            ->with('success', 'You have successfully upload image.')
+            ->with('image', $imageName);
+    }
+}
+```
+
+---
+
+#  Step 7 — Create Blade View  
+
+ **resources/views/imageUpload.blade.php**
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Laravel 12 Add Watermark Example</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body>
+<div class="container">
+
+    <div class="card mt-5">
+        <h3 class="card-header p-3">Laravel 12 Add Watermark Example</h3>
+
+        <div class="card-body">
+
+            @if ($errors->any())
+                <div class="alert alert-danger">
+                    <ul>
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
+            @if (session('success'))
+                <div class="alert alert-success">
+                    {{ session('success') }}
+                </div>
+
+                <img 
+                    src="{{ asset('images/' . session('image')) }}" 
+                    style="max-width:500px; border:1px solid #ddd;"
+                >
+            @endif
+
+            <form action="{{ route('image.store') }}" method="POST" enctype="multipart/form-data">
+                @csrf
+
+                <div class="mb-3">
+                    <label>Image:</label>
+                    <input type="file" name="image" class="form-control">
+                </div>
+
+                <button class="btn btn-success">Upload</button>
+            </form>
+
+        </div>
+    </div>
+
+</div>
+</body>
+</html>
+```
+
+---
+
+#  Step 8 — Run Laravel Server  
+
+```bash
+php artisan serve
+```
+
+Visit:
+
+```
+http://localhost:8000/image-upload
+```
+<img width="1361" height="855" alt="logo" src="https://github.com/user-attachments/assets/3c9876f3-4445-48fa-b36d-0d81616b27c7" />
+
+---
+
+#  Final Output  
+
+✔ Image uploads  
+✔ Watermark applied at bottom-right  
+✔ Transparent logo blends perfectly  
+✔ Saved in:  
+```
+public/images/yourfile.png
+```
+
+
+
