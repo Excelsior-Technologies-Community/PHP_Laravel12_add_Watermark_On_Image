@@ -18,6 +18,10 @@ Route::get('/image-upload', [ImageController::class, 'index'])
 Route::post('/image-upload', [ImageController::class, 'store'])
     ->name('image.store');
 
+// Preview watermarked image
+Route::post('/image-upload/preview', [ImageController::class, 'preview'])
+    ->name('image.preview');
+
 // Download processed image
 Route::get('/image-download/{filename}', [ImageController::class, 'download'])
     ->name('image.download');
@@ -25,3 +29,14 @@ Route::get('/image-download/{filename}', [ImageController::class, 'download'])
 // Delete processed image
 Route::delete('/image-delete/{filename}', [ImageController::class, 'destroy'])
     ->name('image.destroy');
+
+// Send watermarked image via email
+Route::post('/image-email/{filename}', [ImageController::class, 'email'])
+    ->name('image.email');
+
+// Watermark history
+Route::get('/image-history', [ImageController::class, 'history'])
+    ->name('image.history');
+
+Route::delete('/image-history/{id}', [ImageController::class, 'destroyHistory'])
+    ->name('image.history.destroy');
