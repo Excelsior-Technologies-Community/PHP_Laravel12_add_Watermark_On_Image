@@ -11,7 +11,7 @@ class ImageController extends Controller
     /**
      * Display upload page and image gallery.
      */
-    public function index()
+    public function index(Request $request)
     {
         $imageDirectory = public_path('images');
 
@@ -36,17 +36,118 @@ class ImageController extends Controller
                 'url' => asset('images/' . $file->getFilename()),
                 'date' => date('d M Y, h:i A', $file->getMTime()),
                 'size' => $this->formatFileSize($file->getSize()),
+                'size_bytes' => $file->getSize(),
+                'extension' => $extension,
                 'timestamp' => $file->getMTime(),
             ];
         }
 
-        // Newest images first
-        usort($images, function ($a, $b) {
-            return $b['timestamp'] <=> $a['timestamp'];
+        /*
+        |--------------------------------------------------------------------------
+        | NEW FUNCTIONALITY 4 - SEARCH
+        |--------------------------------------------------------------------------
+        */
+
+        $search = trim($request->input('search', ''));
+
+        if ($search !== '') {
+            $images = array_filter($images, function ($image) use ($search) {
+                return str_contains(
+                    strtolower($image['name']),
+                    strtolower($search)
+                );
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | NEW FUNCTIONALITY 5 - FILE TYPE FILTER
+        |--------------------------------------------------------------------------
+        */
+
+        $type = strtolower($request->input('type', 'all'));
+
+        if ($type !== 'all') {
+            $images = array_filter($images, function ($image) use ($type) {
+                return $image['extension'] === $type;
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | NEW FUNCTIONALITY 6 - SORTING
+        |--------------------------------------------------------------------------
+        */
+
+        $sort = $request->input('sort', 'newest');
+
+        usort($images, function ($a, $b) use ($sort) {
+
+            switch ($sort) {
+
+                case 'oldest':
+                    return $a['timestamp'] <=> $b['timestamp'];
+
+                case 'largest':
+                    return $b['size_bytes'] <=> $a['size_bytes'];
+
+                case 'smallest':
+                    return $a['size_bytes'] <=> $b['size_bytes'];
+
+                case 'newest':
+                default:
+                    return $b['timestamp'] <=> $a['timestamp'];
+            }
         });
 
-        return view('imageUpload', compact('images'));
+        /*
+        |--------------------------------------------------------------------------
+        | NEW FUNCTIONALITY 7 - GALLERY STATISTICS
+        |--------------------------------------------------------------------------
+        */
+
+        $allImages = [];
+
+        foreach ($files as $file) {
+            $extension = strtolower($file->getExtension());
+
+            if (!in_array($extension, ['jpg', 'jpeg', 'png', 'webp'])) {
+                continue;
+            }
+
+            $allImages[] = [
+                'extension' => $extension,
+                'size' => $file->getSize(),
+            ];
+        }
+
+        $statistics = [
+            'total' => count($allImages),
+
+            'jpg' => count(array_filter($allImages, function ($image) {
+                return in_array($image['extension'], ['jpg', 'jpeg']);
+            })),
+
+            'png' => count(array_filter($allImages, function ($image) {
+                return $image['extension'] === 'png';
+            })),
+
+            'webp' => count(array_filter($allImages, function ($image) {
+                return $image['extension'] === 'webp';
+            })),
+
+            'storage' => array_sum(array_column($allImages, 'size')),
+        ];
+
+        return view('imageUpload', compact(
+            'images',
+            'statistics',
+            'search',
+            'type',
+            'sort'
+        ));
     }
+
 
     /**
      * Process uploaded image and watermark.
@@ -54,6 +155,7 @@ class ImageController extends Controller
     public function store(Request $request)
     {
         $request->validate([
+
             'image' => [
                 'required',
                 'image',
@@ -79,36 +181,136 @@ class ImageController extends Controller
                 'min:10',
                 'max:100',
             ],
-        ], [
-            'image.required' => 'Please select an image.',
-            'image.image' => 'The selected file must be a valid image.',
-            'image.mimes' => 'Main image must be JPG, JPEG, PNG, or WEBP.',
-            'image.max' => 'Main image must not exceed 10MB.',
-
-            'watermark.image' => 'The watermark must be a valid image.',
-            'watermark.mimes' => 'Watermark must be PNG, JPG, JPEG, or WEBP.',
-            'watermark.max' => 'Watermark must not exceed 2MB.',
-
-            'position.required' => 'Please select a watermark position.',
-            'position.in' => 'Invalid watermark position.',
-
-            'opacity.required' => 'Please select watermark opacity.',
-            'opacity.integer' => 'Opacity must be a number.',
-            'opacity.min' => 'Opacity must be at least 10%.',
-            'opacity.max' => 'Opacity cannot exceed 100%.',
-        ]);
-
-        try {
-            $imageDirectory = public_path('images');
-
-            // Make sure output directory exists
-            if (!File::exists($imageDirectory)) {
-                File::makeDirectory($imageDirectory, 0755, true);
-            }
 
             /*
-             * Generate a unique filename.
-             */
+            |--------------------------------------------------------------------------
+            | NEW FUNCTIONALITY 1 - WATERMARK SIZE
+            |--------------------------------------------------------------------------
+            */
+
+            'watermark_size' => [
+                'required',
+                'integer',
+                'min:10',
+                'max:50',
+            ],
+
+            /*
+            |--------------------------------------------------------------------------
+            | NEW FUNCTIONALITY 2 - WATERMARK ROTATION
+            |--------------------------------------------------------------------------
+            */
+
+            'rotation' => [
+                'required',
+                'integer',
+                'min:-180',
+                'max:180',
+            ],
+
+            /*
+            |--------------------------------------------------------------------------
+            | NEW FUNCTIONALITY 3 - GRAYSCALE
+            |--------------------------------------------------------------------------
+            */
+
+            'grayscale' => [
+                'nullable',
+                'boolean',
+            ],
+
+        ], [
+
+            'image.required' =>
+            'Please select an image.',
+
+            'image.image' =>
+            'The selected file must be a valid image.',
+
+            'image.mimes' =>
+            'Main image must be JPG, JPEG, PNG, or WEBP.',
+
+            'image.max' =>
+            'Main image must not exceed 10MB.',
+
+            'watermark.image' =>
+            'The watermark must be a valid image.',
+
+            'watermark.mimes' =>
+            'Watermark must be PNG, JPG, JPEG, or WEBP.',
+
+            'watermark.max' =>
+            'Watermark must not exceed 2MB.',
+
+            'position.required' =>
+            'Please select a watermark position.',
+
+            'position.in' =>
+            'Invalid watermark position.',
+
+            'opacity.required' =>
+            'Please select watermark opacity.',
+
+            'opacity.integer' =>
+            'Opacity must be a number.',
+
+            'opacity.min' =>
+            'Opacity must be at least 10%.',
+
+            'opacity.max' =>
+            'Opacity cannot exceed 100%.',
+
+            'watermark_size.required' =>
+            'Please select watermark size.',
+
+            'watermark_size.integer' =>
+            'Watermark size must be a number.',
+
+            'watermark_size.min' =>
+            'Watermark size must be at least 10%.',
+
+            'watermark_size.max' =>
+            'Watermark size cannot exceed 50%.',
+
+            'rotation.required' =>
+            'Please select watermark rotation.',
+
+            'rotation.integer' =>
+            'Rotation must be a number.',
+
+            'rotation.min' =>
+            'Rotation cannot be less than -180 degrees.',
+
+            'rotation.max' =>
+            'Rotation cannot exceed 180 degrees.',
+        ]);
+
+
+        try {
+
+            $imageDirectory = public_path('images');
+
+            /*
+            |--------------------------------------------------------------------------
+            | CREATE OUTPUT DIRECTORY
+            |--------------------------------------------------------------------------
+            */
+
+            if (!File::exists($imageDirectory)) {
+                File::makeDirectory(
+                    $imageDirectory,
+                    0755,
+                    true
+                );
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | GENERATE UNIQUE FILE NAME
+            |--------------------------------------------------------------------------
+            */
+
             $imageName =
                 time() .
                 '_' .
@@ -116,117 +318,188 @@ class ImageController extends Controller
                 '.' .
                 strtolower($request->image->extension());
 
-            /*
-             * Read the uploaded main image.
-             */
-            $img = Image::read($request->image->getRealPath());
 
             /*
-             * -------------------------------------------------------
-             * CUSTOM WATERMARK
-             * -------------------------------------------------------
-             *
-             * If user uploads a watermark, use it.
-             *
-             * Otherwise use:
-             *
-             * public/logo.png
-             */
+            |--------------------------------------------------------------------------
+            | READ MAIN IMAGE
+            |--------------------------------------------------------------------------
+            */
+
+            $img = Image::read(
+                $request->image->getRealPath()
+            );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | NEW FUNCTIONALITY 3
+            | GRAYSCALE EFFECT
+            |--------------------------------------------------------------------------
+            */
+
+            if ($request->boolean('grayscale')) {
+                $img->greyscale();
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | SELECT WATERMARK
+            |--------------------------------------------------------------------------
+            */
+
             if ($request->hasFile('watermark')) {
 
-                $watermarkPath = $request
+                $watermarkPath =
+                    $request
                     ->file('watermark')
                     ->getRealPath();
-
             } else {
 
-                $watermarkPath = public_path('logo.png');
+                $watermarkPath =
+                    public_path('logo.png');
 
-                // Make sure default watermark exists
                 if (!File::exists($watermarkPath)) {
+
                     return back()
                         ->withInput()
                         ->withErrors([
                             'watermark' =>
-                                'Default watermark logo.png was not found in the public folder.'
+                            'Default watermark logo.png was not found in the public folder.'
                         ]);
                 }
             }
 
-            /*
-             * Read watermark image.
-             */
-            $watermark = Image::read($watermarkPath);
 
             /*
-             * -------------------------------------------------------
-             * WATERMARK SIZE
-             * -------------------------------------------------------
-             *
-             * Watermark width = 20% of original image width.
-             *
-             * Minimum width = 50px.
-             */
-            $watermarkWidth = max(
-                50,
-                (int) round($img->width() * 0.20)
+            |--------------------------------------------------------------------------
+            | READ WATERMARK
+            |--------------------------------------------------------------------------
+            */
+
+            $watermark = Image::read(
+                $watermarkPath
             );
 
+
             /*
-             * Don't make watermark larger than original image.
-             */
+            |--------------------------------------------------------------------------
+            | NEW FUNCTIONALITY 1
+            | WATERMARK SIZE
+            |--------------------------------------------------------------------------
+            */
+
+            $watermarkSize =
+                (int) $request->input(
+                    'watermark_size',
+                    20
+                );
+
+
+            $watermarkWidth = max(
+                50,
+                (int) round(
+                    $img->width() *
+                        ($watermarkSize / 100)
+                )
+            );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | DON'T MAKE WATERMARK LARGER THAN IMAGE
+            |--------------------------------------------------------------------------
+            */
+
             $watermarkWidth = min(
                 $watermarkWidth,
                 $img->width()
             );
 
+
             /*
-             * Resize watermark while maintaining aspect ratio.
-             */
+            |--------------------------------------------------------------------------
+            | RESIZE WATERMARK
+            |--------------------------------------------------------------------------
+            */
+
             $watermark->scale(
                 width: $watermarkWidth
             );
 
+
             /*
-             * Slightly darken watermark.
-             *
-             * This keeps the original behavior of the project.
-             */
+            |--------------------------------------------------------------------------
+            | DARKEN WATERMARK
+            |--------------------------------------------------------------------------
+            */
+
             $watermark->brightness(-10);
 
-            /*
-             * -------------------------------------------------------
-             * WATERMARK POSITION
-             * -------------------------------------------------------
-             */
-            $position = $request->input(
-                'position',
-                'bottom-right'
-            );
 
             /*
-             * -------------------------------------------------------
-             * WATERMARK OPACITY
-             * -------------------------------------------------------
-             *
-             * Intervention Image v3 supports opacity directly
-             * through the place() method.
-             */
-            $opacity = (int) $request->input(
-                'opacity',
-                70
-            );
+            |--------------------------------------------------------------------------
+            | NEW FUNCTIONALITY 2
+            | WATERMARK ROTATION
+            |--------------------------------------------------------------------------
+            */
+
+            $rotation =
+                (int) $request->input(
+                    'rotation',
+                    0
+                );
+
+
+            if ($rotation !== 0) {
+
+                $watermark->rotate(
+                    $rotation
+                );
+            }
+
 
             /*
-             * Padding from image edges.
-             */
+            |--------------------------------------------------------------------------
+            | POSITION
+            |--------------------------------------------------------------------------
+            */
+
+            $position =
+                $request->input(
+                    'position',
+                    'bottom-right'
+                );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | OPACITY
+            |--------------------------------------------------------------------------
+            */
+
+            $opacity =
+                (int) $request->input(
+                    'opacity',
+                    70
+                );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | PADDING
+            |--------------------------------------------------------------------------
+            */
+
             $padding = 20;
 
+
             /*
-             * -------------------------------------------------------
-             * PLACE WATERMARK
-             * -------------------------------------------------------
-             */
+            |--------------------------------------------------------------------------
+            | PLACE WATERMARK
+            |--------------------------------------------------------------------------
+            */
+
             $img->place(
                 $watermark,
                 $position,
@@ -235,49 +508,61 @@ class ImageController extends Controller
                 $opacity
             );
 
+
             /*
-             * Save processed image.
-             */
+            |--------------------------------------------------------------------------
+            | SAVE IMAGE
+            |--------------------------------------------------------------------------
+            */
+
             $img->save(
-                $imageDirectory . DIRECTORY_SEPARATOR . $imageName
+                $imageDirectory .
+                    DIRECTORY_SEPARATOR .
+                    $imageName
             );
 
+
             /*
-             * Redirect back with success message.
-             */
+            |--------------------------------------------------------------------------
+            | SUCCESS
+            |--------------------------------------------------------------------------
+            */
+
             return redirect()
                 ->route('image.upload')
-                ->with('success', 'Image watermarked successfully!')
-                ->with('image', $imageName);
-
+                ->with(
+                    'success',
+                    'Image watermarked successfully!'
+                )
+                ->with(
+                    'image',
+                    $imageName
+                );
         } catch (\Throwable $e) {
 
-            /*
-             * Return friendly error instead of showing
-             * a Laravel exception page to the user.
-             */
             return back()
                 ->withInput()
                 ->withErrors([
                     'image' =>
-                        'Unable to process the image. Please make sure the uploaded files are valid images.'
+                    'Unable to process the image. Please make sure the uploaded files are valid images.'
                 ]);
         }
     }
+
 
     /**
      * Download processed image.
      */
     public function download($filename)
     {
-        /*
-         * basename() prevents path traversal.
-         */
         $filename = basename($filename);
 
-        $path = public_path(
-            'images' . DIRECTORY_SEPARATOR . $filename
-        );
+        $path =
+            public_path(
+                'images' .
+                    DIRECTORY_SEPARATOR .
+                    $filename
+            );
 
         if (!File::exists($path)) {
             abort(404, 'Image not found.');
@@ -286,32 +571,41 @@ class ImageController extends Controller
         return response()->download($path);
     }
 
+
     /**
      * Delete processed image.
      */
     public function destroy($filename)
     {
-        /*
-         * basename() prevents path traversal.
-         */
         $filename = basename($filename);
 
-        $path = public_path(
-            'images' . DIRECTORY_SEPARATOR . $filename
-        );
+        $path =
+            public_path(
+                'images' .
+                    DIRECTORY_SEPARATOR .
+                    $filename
+            );
 
         if (!File::exists($path)) {
+
             return redirect()
                 ->route('image.upload')
-                ->with('error', 'Image not found.');
+                ->with(
+                    'error',
+                    'Image not found.'
+                );
         }
 
         File::delete($path);
 
         return redirect()
             ->route('image.upload')
-            ->with('success', 'Image deleted successfully.');
+            ->with(
+                'success',
+                'Image deleted successfully.'
+            );
     }
+
 
     /**
      * Format file size.
@@ -319,6 +613,7 @@ class ImageController extends Controller
     private function formatFileSize($bytes)
     {
         if ($bytes >= 1024 * 1024) {
+
             return round(
                 $bytes / (1024 * 1024),
                 2
@@ -326,6 +621,7 @@ class ImageController extends Controller
         }
 
         if ($bytes >= 1024) {
+
             return round(
                 $bytes / 1024,
                 2
